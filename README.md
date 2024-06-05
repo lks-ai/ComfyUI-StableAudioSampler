@@ -8,7 +8,7 @@ The New Stable Diffusion Audio Sampler 1.0 In a ComfyUI Node. Make some beats!
 
 ## Installation
 1. Make sure you have your `HF_TOKEN` environment variable for hugging face because model loading doesn't work just yet directly from a saved file
-2. Go ahead and download model from here for when we fix that: https://huggingface.co/stabilityai/stable-audio-open-1.0/blob/main/model.safetensors
+2. Go ahead and download model from here for when we fix that [Stable Audio Open on HuggingFace](https://huggingface.co/stabilityai/stable-audio-open-1.0/blob/main/model.safetensors)
 3. It should just run if you've got your environment variable set up
 
 There will definitely be issues because this is so new and it was coded quickly so we could test it out.
@@ -17,11 +17,14 @@ This is not an official StableAudioOpen repository
 
 ## Current Features
 - Uses HuggingFace
-- 
+- Generates audio and outputs raw bytes and a sample rate
+- Includes all of the original Stable Audio Open parameters
+- Can save audio to file
 
 ## Roadmap and Requested Features
 Keeping track of requests and ideas as they come in:
 - Model loading from the `models/audio_checkpoints` folder
+- Seed control with `control_after_generate` option
 - Nodes
   - A Mixer Node (mix your audio outputs with some sort of mastering)
   - A Tiling Sampler (concatenate the audios)
