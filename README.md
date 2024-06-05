@@ -14,3 +14,17 @@ The New Stable Diffusion Audio Sampler 1.0 In a ComfyUI Node. Make some beats!
 There will definitely be issues because this is so new and it was coded quickly so we could test it out.
 
 This is not an official StableAudioOpen repository
+
+## Current Features
+- Uses HuggingFace
+- 
+
+## Roadmap and Requested Features
+Keeping track of requests and ideas as they come in:
+- Model loading from the `models/audio_checkpoints` folder
+- Nodes
+  - A Mixer Node (mix your audio outputs with some sort of mastering)
+  - A Tiling Sampler (concatenate the audios)
+  - A Model Loader Node (to load audio models separately and pipe to wherever)
+- Making the Audio format compatible with other Audio Node packs
+- A bit of Refactoring cause this was a quick release
