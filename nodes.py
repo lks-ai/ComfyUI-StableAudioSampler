@@ -17,6 +17,7 @@ class AnyType(str):
     def __ne__(self, __value: object) -> bool:
         return False
 base_path = os.path.dirname(os.path.realpath(__file__))
+os.makedirs("models/audio_checkpoints", exist_ok=True)
 
 # Our any instance wants to be a wildcard string
 any = AnyType("audio")
