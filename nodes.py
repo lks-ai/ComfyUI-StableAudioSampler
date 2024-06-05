@@ -5,6 +5,7 @@ import torchaudio
 from einops import rearrange
 from stable_audio_tools import get_pretrained_model
 from stable_audio_tools.inference.generation import generate_diffusion_cond
+import numpy as np
 
 from safetensors.torch import load_file
 from .util_config import get_model_config
@@ -29,8 +30,11 @@ if len(model_files) == 0:
 def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_path, model_filename):
     model_path = f"models/audio_checkpoints/{model_filename}"
     if model_filename.endswith(".safetensors") or model_filename.endswith(".ckpt"):
-        model = create_model_from_config(get_model_config())
+        model_config = get_model_config()
+        model = create_model_from_config(model_config)
         model.load_state_dict(load_ckpt_state_dict(model_path))
+        sample_rate = model_config["sample_rate"]
+        sample_size = model_config["sample_size"]
     else:
         model, model_config = get_pretrained_model("stabilityai/stable-audio-open-1.0")
         sample_rate = model_config["sample_rate"]
@@ -43,6 +47,8 @@ def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, 
         "seconds_start": 0,
         "seconds_total": 30
     }]
+    
+    seed = np.random.randint(0, np.iinfo(np.int32).max)
 
     output = generate_diffusion_cond(
         model,
@@ -53,7 +59,8 @@ def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, 
         sigma_min=sigma_min,
         sigma_max=sigma_max,
         sampler_type=sampler_type,
-        device=device
+        device=device,
+        seed=seed,
     )
 
     output = rearrange(output, "b d n -> d (b n)")
