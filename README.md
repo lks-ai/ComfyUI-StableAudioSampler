@@ -36,3 +36,6 @@ Keeping track of requests and ideas as they come in:
   - Possibly Clipping or something
  
 We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool.
+
+# Feature Requests
+If you have a request for a feature, open an issue about it and it will be seen.
