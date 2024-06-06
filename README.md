@@ -23,6 +23,7 @@ This is not an official StableAudioOpen repository.
 
 ## Roadmap and Requested Features
 Keeping track of requests and ideas as they come in:
+- Output to VHS Video Encoder Format
 - Stereo output
 - Model loading from the `models/audio_checkpoints` folder
 - Seed control with `control_after_generate` option
