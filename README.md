@@ -24,6 +24,7 @@ This is not an official StableAudioOpen repository.
 
 ## Roadmap and Requested Features
 Keeping track of requests and ideas as they come in:
+- Audio to Audio (like in the Gradio Example)
 - Output to VHS Video Encoder Format
 - Stereo output
 - Model loading from the `models/audio_checkpoints` folder
