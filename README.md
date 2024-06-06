@@ -35,4 +35,4 @@ Keeping track of requests and ideas as they come in:
   - Gain
   - Possibly Clipping or something
  
-I'm very open to anyone who wants to contribute. Make your forks and pull requests. We will build something cool.
+We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool.
