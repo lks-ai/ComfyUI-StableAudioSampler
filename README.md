@@ -11,9 +11,9 @@ The New Stable Diffusion Audio Sampler 1.0 In a ComfyUI Node. Make some beats!
 2. Go ahead and download model from here for when we fix that [Stable Audio Open on HuggingFace](https://huggingface.co/stabilityai/stable-audio-open-1.0/blob/main/model.safetensors)
 3. It should just run if you've got your environment variable set up
 
-There will definitely be issues because this is so new and it was coded quickly so we could test it out.
+There will definitely be issues because this is so new and it was coded quickly so we couldn't test it out.
 
-This is not an official StableAudioOpen repository
+This is not an official StableAudioOpen repository.
 
 ## Current Features
 - Uses HuggingFace
