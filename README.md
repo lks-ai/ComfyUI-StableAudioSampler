@@ -37,6 +37,8 @@ Keeping track of requests and ideas as they come in:
   - Gain
   - Possibly Clipping at some dB
   - Cleaning up some of the current options with selectors, etc.
+  - Negative Prompts
+- Looking at Putting in InitAudio tomorrow so we can see Melspectograms (cause that looks bad ass, saw the gradio)
  
 We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool.
 
