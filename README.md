@@ -9,7 +9,8 @@ The New Stable Audio Open 1.0 Sampler In a ComfyUI Node. Make some beats!
 ## Installation
 1. Make sure you have your `HF_TOKEN` environment variable for hugging face because model loading doesn't work just yet directly from a saved file
 2. Go ahead and download model from here for when we fix that [Stable Audio Open on HuggingFace](https://huggingface.co/stabilityai/stable-audio-open-1.0/blob/main/model.safetensors)
-3. It should just run if you've got your environment variable set up
+3. Make sure to run `pip install -r requirements.txt` inside the repo folder if you're not using Manager
+4. It should just run if you've got your environment variable set up
 
 There will definitely be issues because this is so new and it was coded quickly so we couldn't test it out.
 
