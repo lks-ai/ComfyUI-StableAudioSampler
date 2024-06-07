@@ -72,15 +72,24 @@ def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, 
         seed=seed,
     )
 
+    output = rearrange(output, "b d n -> d (b n)")
+
+    output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
+
     if save:
         save_path = folder_paths.get_output_directory()
     else:
         save_path = folder_paths.get_temp_directory()
 
-    output = rearrange(output, "b d n -> d (b n)")
+    save_path = os.path.join(save_path, "audio")
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
 
-    output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
-    
+    file_counter = len([name for name in os.listdir(save_path) if os.path.isfile(os.path.join(save_path, name))])
+    counter = file_counter + 1
+    file_name = f"{counter:05}.wav"
+    save_path = os.path.join(save_path, file_name)
+
     torchaudio.save(save_path, output, sample_rate)
     
     # Convert to bytes
@@ -100,7 +109,8 @@ class StableAudioSampler:
                 "sample_size": ("INT", {"default": 65536, "min": 1, "max": 1000000}),
                 "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
-                "sampler_type": (comfy.samplers.KSampler.SAMPLERS, {"default": "dpmpp_3m_sde",}),
+                #"sampler_type": (comfy.samplers.KSampler.SAMPLERS, {"default": "dpmpp_3m_sde",}),
+                "sampler_type": ("STRING", {"default": "dpmpp-3m-sde"}),
                 "save": ("BOOLEAN", {"default": True}),
             }
         }
