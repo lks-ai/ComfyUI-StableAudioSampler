@@ -37,7 +37,7 @@ if len(model_files) == 0:
 
 
 def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, model_filename):
-    model_path = f"models/audio_checkpoints/{model_filename}"
+    model_path = folder_paths.get_full_path("audio_checkpoints", model_filename)
     if model_filename.endswith(".safetensors") or model_filename.endswith(".ckpt"):
         model_config = get_model_config()
         model = create_model_from_config(model_config)
