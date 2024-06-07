@@ -11,6 +11,8 @@ from safetensors.torch import load_file
 from .util_config import get_model_config
 from stable_audio_tools.models.factory import create_model_from_config
 from stable_audio_tools.models.utils import load_ckpt_state_dict
+import folder_paths
+import comfy.samplers
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -22,12 +24,19 @@ os.makedirs("models/audio_checkpoints", exist_ok=True)
 
 # Our any instance wants to be a wildcard string
 any = AnyType("audio")
-model_files = [os.path.basename(file) for file in glob.glob("models/audio_checkpoints/*.safetensors")] + [os.path.basename(file) for file in glob.glob("models/audio_checkpoints/*.ckpt")]
+
+if "audio_checkpoints" not in folder_paths.folder_names_and_paths:
+    folder_paths.folder_names_and_paths["audio_checkpoints"] = ([os.path.join(folder_paths.models_dir, "audio_checkpoints")], [".ckpt", ".safetensors"])
+    models_dir = os.path.join(folder_paths.models_dir, "audio_checkpoints")
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
+model_files = folder_paths.get_filename_list("audio_checkpoints")
+
 if len(model_files) == 0:
     model_files.append("Put models in models/audio_checkpoints")
 
 
-def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_path, model_filename):
+def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, model_filename):
     model_path = f"models/audio_checkpoints/{model_filename}"
     if model_filename.endswith(".safetensors") or model_filename.endswith(".ckpt"):
         model_config = get_model_config()
@@ -63,12 +72,16 @@ def generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, 
         seed=seed,
     )
 
+    if save:
+        save_path = folder_paths.get_output_directory()
+    else:
+        save_path = folder_paths.get_temp_directory()
+
     output = rearrange(output, "b d n -> d (b n)")
 
     output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
     
-    if save:
-        torchaudio.save("output/" + save_path, output, sample_rate)
+    torchaudio.save(save_path, output, sample_rate)
     
     # Convert to bytes
     audio_bytes = output.numpy().tobytes()
@@ -87,9 +100,8 @@ class StableAudioSampler:
                 "sample_size": ("INT", {"default": 65536, "min": 1, "max": 1000000}),
                 "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
-                "sampler_type": ("STRING", {"default": "dpmpp-3m-sde"}),
+                "sampler_type": (comfy.samplers.KSampler.SAMPLERS, {"default": "dpmpp_3m_sde",}),
                 "save": ("BOOLEAN", {"default": True}),
-                "save_path": ("STRING", {"default": "output.wav"}),
             }
         }
 
@@ -99,8 +111,8 @@ class StableAudioSampler:
 
     CATEGORY = "audio"
 
-    def sample(self, prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, save, save_path, model_filename):
-        audio_bytes, sample_rate = generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_path, model_filename)
+    def sample(self, prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, save, model_filename):
+        audio_bytes, sample_rate = generate_audio(prompt, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, model_filename)
         return (audio_bytes, sample_rate)
 
 NODE_CLASS_MAPPINGS = {
