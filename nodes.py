@@ -25,6 +25,8 @@ os.makedirs("models/audio_checkpoints", exist_ok=True)
 # Our any instance wants to be a wildcard string
 any = AnyType("audio")
 
+SAMPLERS = ["k-heun", "k-lms", "k-dpmpp-2s-ancestral", "k-dpm-2", "k-dpm-fast", "k-dpm-adaptive", "dpmpp-2m-sde", "dpmpp-3m-sde"]
+
 if "audio_checkpoints" not in folder_paths.folder_names_and_paths:
     folder_paths.folder_names_and_paths["audio_checkpoints"] = ([os.path.join(folder_paths.models_dir, "audio_checkpoints")], [".ckpt", ".safetensors"])
     models_dir = os.path.join(folder_paths.models_dir, "audio_checkpoints")
@@ -110,7 +112,7 @@ class StableAudioSampler:
                 "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 #"sampler_type": (comfy.samplers.KSampler.SAMPLERS, {"default": "dpmpp_3m_sde",}),
-                "sampler_type": ("STRING", {"default": "dpmpp-3m-sde"}),
+                "sampler_type": (SAMPLERS, {"default": "dpmpp-3m-sde"}),
                 "save": ("BOOLEAN", {"default": True}),
             }
         }
