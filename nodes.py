@@ -64,11 +64,61 @@ def repo_path(repo, filename):
         instance_path = instance_path.replace('\\', "/")
     return instance_path
 
-def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0):
-    model, sample_rate, sample_size = modelinfo
+# def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0):
+#     model, sample_rate, sample_size, _device = modelinfo
+#     b_pos, b_neg = cond_batch
+#     p_conditioning, p_batch_size = b_pos
+#     n_conditioning, n_batch_size = b_neg
+
+#     output = generate_diffusion_cond(
+#         model,
+#         steps=steps,
+#         cfg_scale=cfg_scale,
+#         conditioning=p_conditioning,
+#         negative_conditioning=n_conditioning,
+#         sample_size=sample_size,
+#         sigma_min=sigma_min,
+#         sigma_max=sigma_max,
+#         sampler_type=sampler_type,
+#         device=_device,
+#         seed=seed,
+#         batch_size=p_batch_size,
+#         init_noise_level=init_noise_level,
+#         #return_latents=True,
+#     )
+
+#     # Rearrange audio batch to a single sequence
+#     output = rearrange(output, "b d n -> d (b n)")
+#     # Peak normalize, clip, convert to int16
+#     output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
+    
+#     # Save Audio to output
+#     if save:
+#         save_audio_files(output, sample_rate, save_prefix, counter)
+
+#     # Generate the spectrogram
+#     spectrogram = audio_spectrogram_image(output, sample_rate=sample_rate)
+    
+#     # Convert to bytes
+#     audio_bytes = output.numpy().tobytes()
+
+#     # GC and memory Cleanup
+#     del model
+#     if torch.cuda.is_available():
+#         torch.cuda.empty_cache()
+#     gc.collect()
+    
+#     return audio_bytes, sample_rate, spectrogram
+
+def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0):
+    model, sample_rate, sample_size, _device = modelinfo
     b_pos, b_neg = cond_batch
     p_conditioning, p_batch_size = b_pos
     n_conditioning, n_batch_size = b_neg
+
+    print("Model Loaded:", model)
+    print("Positive Conditioning:", p_conditioning)
+    print("Negative Conditioning:", n_conditioning)
 
     output = generate_diffusion_cond(
         model,
@@ -80,28 +130,27 @@ def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_m
         sigma_min=sigma_min,
         sigma_max=sigma_max,
         sampler_type=sampler_type,
-        device=device,
+        device=_device,
         seed=seed,
         batch_size=p_batch_size,
-        #return_latents=True,
+        init_noise_level=init_noise_level,
     )
 
-    # Rearrange audio batch to a single sequence
+    print("Raw Output:", output)
+
     output = rearrange(output, "b d n -> d (b n)")
-    # Peak normalize, clip, convert to int16
+    print("Rearranged Output:", output)
+
     output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
+    print("Transformed Output:", output)
     
-    # Save Audio to output
     if save:
         save_audio_files(output, sample_rate, save_prefix, counter)
 
-    # Generate the spectrogram
     spectrogram = audio_spectrogram_image(output, sample_rate=sample_rate)
     
-    # Convert to bytes
     audio_bytes = output.numpy().tobytes()
 
-    # GC and memory Cleanup
     del model
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -109,7 +158,7 @@ def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_m
     
     return audio_bytes, sample_rate, spectrogram
 
-def get_model(model_filename=None, config=None, repo=None, half_precision=False):
+def get_model(model_filename=None, config=None, repo=None, half_precision=False, device_override=None):
     #print(model_filename, config, repo, half_precision)
     if model_filename:
         model_path = get_models_path(model_filename) #f"models/audio_checkpoints/{model_filename}"
@@ -144,12 +193,13 @@ def get_model(model_filename=None, config=None, repo=None, half_precision=False)
     else:
         raise ValueError("You must specify an Audio Checkpoint or a Repo to load from.")
     
-    model = model.to(device) #.eval().requires_grad_(False)
+    _device = device if not device_override else device_override
+    model = model.to(_device).requires_grad_(False) #.eval().requires_grad_(False)
     
-    if half_precision:
+    if half_precision and _device != "cpu":
         model.to(torch.float16)
     
-    return (model, sample_rate, sample_size)
+    return (model, sample_rate, sample_size, _device)
 
 def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pretransform_ckpt_path=None, device="cuda", model_half=False):
     global model, sample_rate, sample_size
@@ -223,6 +273,7 @@ class StableAudioSampler:
                 "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sampler_type": (SCHEDULERS, {"default": "dpmpp-3m-sde"}),
+                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "save": ("BOOLEAN", {"default": True}),
                 "save_prefix": ("STRING", {"default": "StableAudio"}),
             }
@@ -235,10 +286,8 @@ class StableAudioSampler:
 
     CATEGORY = "audio/samplers"
 
-    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, save, save_prefix):
-        for key, value in locals().items():
-            print(f"{key}: {value}")
-        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter)
+    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix):
+        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise)
         spectrograms = create_image_batch([spectrogram], 1)
         return (audio_bytes, sample_rate, spectrograms)
 
@@ -253,6 +302,7 @@ class StableLoadAudioModel:
                 "model_config": (config_files, ),
                 "repo": ("STRING", {"default": "stabilityai/stable-audio-open-1.0"}),
                 "half_precision": ("BOOLEAN", {"default": False}),
+                "force_cpu": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -262,9 +312,9 @@ class StableLoadAudioModel:
 
     CATEGORY = "audio/loaders"
 
-    def load(self, model_filename, model_config=None, repo=None, half_precision=None):
+    def load(self, model_filename, model_config=None, repo=None, half_precision=None, force_cpu=None):
         mpath = get_models_path(model_config)
-        modelinfo = get_model(model_filename=model_filename, config=mpath, repo=repo, half_precision=half_precision)
+        modelinfo = get_model(model_filename=model_filename, config=mpath, repo=repo, half_precision=half_precision, device_override=None if not force_cpu else "cpu")
         return (modelinfo,)
     
 class StableAudioPrompt:
