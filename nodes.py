@@ -1,4 +1,4 @@
-import os, sys, json
+import os, sys, json, gc
 import glob
 import torch
 import torchaudio
@@ -11,8 +11,13 @@ from .util_config import get_model_config
 # from stable_audio_tools.models.factory import create_model_from_config
 # from stable_audio_tools.models.utils import load_ckpt_state_dict
 from stable_audio_tools import get_pretrained_model, create_model_from_config
-from stable_audio_tools.inference.generation import generate_diffusion_cond
+# from stable_audio_tools.inference.generation import generate_diffusion_cond
 from stable_audio_tools.models.utils import load_ckpt_state_dict
+
+from stable_audio_tools.inference.generation import generate_diffusion_cond, generate_diffusion_uncond
+from stable_audio_tools.inference.utils import prepare_audio
+from stable_audio_tools.training.utils import copy_state_dict
+from aeiou.viz import audio_spectrogram_image
 
 # Test current setup
 # Add in Audio2Audio
@@ -31,22 +36,26 @@ import folder_paths # type: ignore
 device = "cuda" if torch.cuda.is_available() else "cpu"
 MAX_FP32 = np.iinfo(np.int32).max
 SCHEDULERS = ["dpmpp-3m-sde", "dpmpp-2m-sde", "k-heun", "k-lms", "k-dpmpp-2s-ancestral", "k-dpm-2", "k-dpm-fast"]
+ACKPT_FOLDER = "models/audio_checkpoints/"
 
 class AnyType(str):
     def __ne__(self, __value: object) -> bool:
         return False
 
 base_path = os.path.dirname(os.path.realpath(__file__))
-os.makedirs("models/audio_checkpoints", exist_ok=True)
+os.makedirs(ACKPT_FOLDER, exist_ok=True)
 
 # Our any instance wants to be a wildcard string
 any = AnyType("audio")
-def get_cpkt_path(ckpt_name):
-    return f"models/audio_checkpoints/{ckpt_name}"
+def get_models_path(ckpt_name):
+    if not ckpt_name:
+        return None
+    return f"{ACKPT_FOLDER}{ckpt_name}"
 
-model_files = [os.path.basename(file) for file in glob.glob(f"models/audio_checkpoints/*.safetensors")] + [os.path.basename(file) for file in glob.glob("models/audio_checkpoints/*.ckpt")]
+model_files = [os.path.basename(file) for file in glob.glob(f"{ACKPT_FOLDER}*.safetensors")] + [os.path.basename(file) for file in glob.glob("models/audio_checkpoints/*.ckpt")]
+config_files = [os.path.basename(file) for file in glob.glob(f"{ACKPT_FOLDER}*.json")]
 if len(model_files) == 0:
-    model_files.append("Put models in models/audio_checkpoints")
+    model_files.append(f"Put models in {ACKPT_FOLDER}")
 
 def repo_path(repo, filename):
     path = os.path.join(repo, filename)
@@ -74,38 +83,57 @@ def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_m
         device=device,
         seed=seed,
         batch_size=p_batch_size,
-        return_latents=True,
+        #return_latents=True,
     )
 
+    # Rearrange audio batch to a single sequence
     output = rearrange(output, "b d n -> d (b n)")
-
+    # Peak normalize, clip, convert to int16
     output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
     
+    # Save Audio to output
     if save:
         save_audio_files(output, sample_rate, save_prefix, counter)
+
+    # Generate the spectrogram
+    spectrogram = audio_spectrogram_image(output, sample_rate=sample_rate)
     
     # Convert to bytes
     audio_bytes = output.numpy().tobytes()
-    
-    return audio_bytes, sample_rate
 
-def get_model(model_filename=None, repo=None):
+    # GC and memory Cleanup
+    del model
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+    
+    return audio_bytes, sample_rate, spectrogram
+
+def get_model(model_filename=None, config=None, repo=None, half_precision=False):
+    #print(model_filename, config, repo, half_precision)
     if model_filename:
-        model_path = get_cpkt_path(model_filename) #f"models/audio_checkpoints/{model_filename}"
+        model_path = get_models_path(model_filename) #f"models/audio_checkpoints/{model_filename}"
         if model_filename.endswith(".safetensors") or model_filename.endswith(".ckpt"):
-            model_config = get_model_config()
+            if not config:
+                model_config = get_model_config()
+            else:
+                with open(config, 'r') as f:
+                    model_config = json.load(f)
             model = create_model_from_config(model_config)
             print(model_path)
             model.load_state_dict(load_ckpt_state_dict(model_path))
         else:
-            model, model_config = get_pretrained_model("stabilityai/stable-audio-open-1.0")
+            repo_id = "stabilityai/stable-audio-open-1.0" if not repo else repo
+            print(f"Loading pretrained model {repo_id}")
+            model, model_config = get_pretrained_model(repo_id)
         sample_rate = model_config["sample_rate"]
         sample_size = model_config["sample_size"]
     elif repo:
         if repo == "stabilityai/stable-audio-open-1.0":
+            print(f"Loading pretrained model {repo}")
             model, model_config = get_pretrained_model(repo)
         else:
-            json_path = repo_path(repo, "model_config.json")
+            json_path = config or repo_path(repo, "model_config.json")
             model_path = repo_path(repo, "model.safetensors")
             with open(json_path) as f:
                 model_config = json.load(f)
@@ -113,8 +141,48 @@ def get_model(model_filename=None, repo=None):
             model.load_state_dict(load_ckpt_state_dict(model_path), strict=False)
         sample_rate = model_config["sample_rate"]
         sample_size = model_config["sample_size"]
+    else:
+        raise ValueError("You must specify an Audio Checkpoint or a Repo to load from.")
+    
+    model = model.to(device) #.eval().requires_grad_(False)
+    
+    if half_precision:
+        model.to(torch.float16)
+    
+    return (model, sample_rate, sample_size)
 
-    return (model.to(device), sample_rate, sample_size)
+def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pretransform_ckpt_path=None, device="cuda", model_half=False):
+    global model, sample_rate, sample_size
+    
+    if pretrained_name is not None:
+        print(f"Loading pretrained model {pretrained_name}")
+        model, model_config = get_pretrained_model(pretrained_name)
+
+    elif model_config is not None and model_ckpt_path is not None:
+        print(f"Creating model from config")
+        model = create_model_from_config(model_config)
+
+        print(f"Loading model checkpoint from {model_ckpt_path}")
+        # Load checkpoint
+        copy_state_dict(model, load_ckpt_state_dict(model_ckpt_path))
+        #model.load_state_dict(load_ckpt_state_dict(model_ckpt_path))
+
+    sample_rate = model_config["sample_rate"]
+    sample_size = model_config["sample_size"]
+
+    if pretransform_ckpt_path is not None:
+        print(f"Loading pretransform checkpoint from {pretransform_ckpt_path}")
+        model.pretransform.load_state_dict(load_ckpt_state_dict(pretransform_ckpt_path), strict=False)
+        print(f"Done loading pretransform")
+
+    model.to(device).eval().requires_grad_(False)
+
+    if model_half:
+        model.to(torch.float16)
+        
+    print(f"Done loading model")
+
+    return model, model_config
 
 def save_audio_files(output, sample_rate, filename_prefix, counter):
     filename_prefix += ""
@@ -125,6 +193,17 @@ def save_audio_files(output, sample_rate, filename_prefix, counter):
         file_path = os.path.join(output_dir, f"{filename_prefix}_{counter:05}.wav")
         torchaudio.save(file_path, audio.unsqueeze(0), sample_rate)
         counter += 1
+
+from aeiou.viz import spectrogram_image
+
+def create_image_batch(spectrograms, batch_size):
+    images = []
+    for spec in spectrograms:
+        im = spec.convert("RGB")  # Ensure image is in RGB format
+        im_tensor = torch.tensor(np.array(im))  # Convert to tensor, keeping the dimensions as (height, width, channels)
+        images.append(im_tensor)
+    batch_tensor = torch.stack(images)  # Stack images into a batch
+    return batch_tensor
 
 class StableAudioSampler:
     def __init__(self):
@@ -149,8 +228,8 @@ class StableAudioSampler:
             }
         }
 
-    RETURN_TYPES = ("VHS_AUDIO", "INT")
-    RETURN_NAMES = ("audio", "sample_rate")
+    RETURN_TYPES = ("VHS_AUDIO", "INT", "IMAGE")
+    RETURN_NAMES = ("audio", "sample_rate", "image")
     FUNCTION = "sample"
     OUTPUT_NODE = True
 
@@ -159,8 +238,9 @@ class StableAudioSampler:
     def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, save, save_prefix):
         for key, value in locals().items():
             print(f"{key}: {value}")
-        audio_bytes, sample_rate = generate_audio((positive, negative), steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter)
-        return (audio_bytes, sample_rate)
+        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter)
+        spectrograms = create_image_batch([spectrogram], 1)
+        return (audio_bytes, sample_rate, spectrograms)
 
 class StableLoadAudioModel:
     @classmethod
@@ -170,7 +250,9 @@ class StableLoadAudioModel:
                 "model_filename": (model_files, ),
             },
             "optional": {
-                "repo": ("STRING", {"default": "stabilityai/stable-audio-open-1.0"})
+                "model_config": (config_files, ),
+                "repo": ("STRING", {"default": "stabilityai/stable-audio-open-1.0"}),
+                "half_precision": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -180,8 +262,9 @@ class StableLoadAudioModel:
 
     CATEGORY = "audio/loaders"
 
-    def load(self, model_filename, repo=None):
-        modelinfo = get_model(model_filename=model_filename, repo=repo)
+    def load(self, model_filename, model_config=None, repo=None, half_precision=None):
+        mpath = get_models_path(model_config)
+        modelinfo = get_model(model_filename=model_filename, config=mpath, repo=repo, half_precision=half_precision)
         return (modelinfo,)
     
 class StableAudioPrompt:
@@ -198,7 +281,7 @@ class StableAudioPrompt:
     RETURN_NAMES = ("conditioning", )
     FUNCTION = "go"
 
-    CATEGORY = "audio/loaders"
+    CATEGORY = "audio/conditioning"
 
     def go(self, conditioning, prompt):
         cond, batch_size = conditioning
@@ -226,7 +309,7 @@ class StableAudioConditioning:
     RETURN_NAMES = ("conditioning", )
     FUNCTION = "go"
 
-    CATEGORY = "audio/loaders"
+    CATEGORY = "audio/conditioning"
 
     def go(self, seconds_start, seconds_total, batch_size):
         conditioning = [{
