@@ -18,6 +18,7 @@ from stable_audio_tools.inference.generation import generate_diffusion_cond, gen
 from stable_audio_tools.inference.utils import prepare_audio
 from stable_audio_tools.training.utils import copy_state_dict
 from aeiou.viz import audio_spectrogram_image
+from torchaudio import transforms as T
 
 # Test current setup
 # Add in Audio2Audio
@@ -64,61 +65,41 @@ def repo_path(repo, filename):
         instance_path = instance_path.replace('\\', "/")
     return instance_path
 
-# def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0):
-#     model, sample_rate, sample_size, _device = modelinfo
-#     b_pos, b_neg = cond_batch
-#     p_conditioning, p_batch_size = b_pos
-#     n_conditioning, n_batch_size = b_neg
-
-#     output = generate_diffusion_cond(
-#         model,
-#         steps=steps,
-#         cfg_scale=cfg_scale,
-#         conditioning=p_conditioning,
-#         negative_conditioning=n_conditioning,
-#         sample_size=sample_size,
-#         sigma_min=sigma_min,
-#         sigma_max=sigma_max,
-#         sampler_type=sampler_type,
-#         device=_device,
-#         seed=seed,
-#         batch_size=p_batch_size,
-#         init_noise_level=init_noise_level,
-#         #return_latents=True,
-#     )
-
-#     # Rearrange audio batch to a single sequence
-#     output = rearrange(output, "b d n -> d (b n)")
-#     # Peak normalize, clip, convert to int16
-#     output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
-    
-#     # Save Audio to output
-#     if save:
-#         save_audio_files(output, sample_rate, save_prefix, counter)
-
-#     # Generate the spectrogram
-#     spectrogram = audio_spectrogram_image(output, sample_rate=sample_rate)
-    
-#     # Convert to bytes
-#     audio_bytes = output.numpy().tobytes()
-
-#     # GC and memory Cleanup
-#     del model
-#     if torch.cuda.is_available():
-#         torch.cuda.empty_cache()
-#     gc.collect()
-    
-#     return audio_bytes, sample_rate, spectrogram
-
-def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0):
+def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio=None):
     model, sample_rate, sample_size, _device = modelinfo
     b_pos, b_neg = cond_batch
     p_conditioning, p_batch_size = b_pos
     n_conditioning, n_batch_size = b_neg
+    sample_size = p_conditioning[0]['seconds_total'] * sample_rate
 
-    print("Model Loaded:", model)
+    #dprint("Model Loaded:", model)
     print("Positive Conditioning:", p_conditioning)
     print("Negative Conditioning:", n_conditioning)
+    print("Sample Size:", sample_size)
+    print("Sample Rate:", sample_rate)
+    print("Seconds:", sample_size / sample_rate)
+
+    if init_audio is not None:
+        in_sr, init_audio = init_audio
+        # Turn into torch tensor, converting from int16 to float32
+        init_audio = torch.from_numpy(init_audio).float().div(32767)
+        
+        if init_audio.dim() == 1:
+            init_audio = init_audio.unsqueeze(0) # [1, n]
+        elif init_audio.dim() == 2:
+            init_audio = init_audio.transpose(0, 1) # [n, 2] -> [2, n]
+
+        if in_sr != sample_rate:
+            resample_tf = T.Resample(in_sr, sample_rate).to(init_audio.device)
+            init_audio = resample_tf(init_audio)
+
+        audio_length = init_audio.shape[-1]
+
+        if audio_length > sample_size:
+
+            input_sample_size = audio_length + (model.min_input_length - (audio_length % model.min_input_length)) % model.min_input_length
+
+        init_audio = (sample_rate, init_audio)
 
     output = generate_diffusion_cond(
         model,
@@ -133,7 +114,8 @@ def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_m
         device=_device,
         seed=seed,
         batch_size=p_batch_size,
-        init_noise_level=init_noise_level,
+        init_noise_level=init_noise_level, 
+        init_audio=init_audio
     )
 
     print("Raw Output:", output)
@@ -157,6 +139,7 @@ def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_m
     gc.collect()
     
     return audio_bytes, sample_rate, spectrogram
+
 
 def get_model(model_filename=None, config=None, repo=None, half_precision=False, device_override=None):
     #print(model_filename, config, repo, half_precision)
@@ -276,6 +259,9 @@ class StableAudioSampler:
                 "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "save": ("BOOLEAN", {"default": True}),
                 "save_prefix": ("STRING", {"default": "StableAudio"}),
+            },
+            "optional": {
+                "audio": ("VHS_AUDIO", )
             }
         }
 
@@ -286,8 +272,8 @@ class StableAudioSampler:
 
     CATEGORY = "audio/samplers"
 
-    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix):
-        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise)
+    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, audio=None):
+        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise, init_audio=audio)
         spectrograms = create_image_batch([spectrogram], 1)
         return (audio_bytes, sample_rate, spectrograms)
 
@@ -323,7 +309,7 @@ class StableAudioPrompt:
         return {
             "required": {
                 "conditioning": ("SAOCOND", {"forceInput": True}),
-                "prompt": ("STRING", {"default": "", "multiline": True}),
+                "prompt": ("STRING", {"multiline": True}),
             }
         }
  
@@ -334,15 +320,22 @@ class StableAudioPrompt:
     CATEGORY = "audio/conditioning"
 
     def go(self, conditioning, prompt):
+        print("PROMPT", prompt)
         cond, batch_size = conditioning
-        cond[0]['prompt'] = prompt
+        print(cond, batch_size)
+        o = []
+        #cond[0]['prompt'] = prompt
+        for v in cond:
+            v['prompt'] = prompt
+            o.append(v.copy())
         #c = conditioning[0]
         # conditioning = [{
         #     "prompt": prompt,
         #     "seconds_start": seconds_start,
         #     "seconds_total": seconds_total
         # }]
-        return ((cond, batch_size), )
+        print(o, batch_size)
+        return ((o, batch_size), )
 
 class StableAudioConditioning:
     @classmethod
