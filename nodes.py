@@ -47,7 +47,7 @@ base_path = os.path.dirname(os.path.realpath(__file__))
 os.makedirs(ACKPT_FOLDER, exist_ok=True)
 
 # Our any instance wants to be a wildcard string
-any = AnyType("audio")
+any = AnyType("*")
 def get_models_path(ckpt_name):
     if not ckpt_name:
         return None
@@ -65,7 +65,11 @@ def repo_path(repo, filename):
         instance_path = instance_path.replace('\\', "/")
     return instance_path
 
-def generate_audio(cond_batch, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio=None):
+def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio=None):
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+
     model, sample_rate, sample_size, _device = modelinfo
     b_pos, b_neg = cond_batch
     p_conditioning, p_batch_size = b_pos
@@ -252,7 +256,7 @@ class StableAudioSampler:
                 "seed": ("INT", {"default": -1, "min": -1, "max": MAX_FP32}),
                 "steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
                 "cfg_scale": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 100.0, "step": 0.1}),
-                "sample_size": ("INT", {"default": 65536, "min": 1, "max": 1000000}),
+                # "sample_size": ("INT", {"default": 65536, "min": 1, "max": 1000000}),
                 "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sampler_type": (SCHEDULERS, {"default": "dpmpp-3m-sde"}),
@@ -261,19 +265,19 @@ class StableAudioSampler:
                 "save_prefix": ("STRING", {"default": "StableAudio"}),
             },
             "optional": {
-                "audio": ("VHS_AUDIO", )
+                "audio": (any, )
             }
         }
 
-    RETURN_TYPES = ("VHS_AUDIO", "INT", "IMAGE")
+    RETURN_TYPES = (any, "INT", "IMAGE")
     RETURN_NAMES = ("audio", "sample_rate", "image")
     FUNCTION = "sample"
     OUTPUT_NODE = True
 
     CATEGORY = "audio/samplers"
 
-    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, audio=None):
-        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sample_size, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise, init_audio=audio)
+    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, audio=None):
+        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise, init_audio=audio)
         spectrograms = create_image_batch([spectrogram], 1)
         return (audio_bytes, sample_rate, spectrograms)
 
@@ -337,6 +341,8 @@ class StableAudioPrompt:
         print(o, batch_size)
         return ((o, batch_size), )
 
+import time
+
 class StableAudioConditioning:
     @classmethod
     def INPUT_TYPES(s):
@@ -361,6 +367,10 @@ class StableAudioConditioning:
             "seconds_total": seconds_total
         }]
         return ((conditioning, batch_size), )
+
+    @classmethod
+    def IS_CHANGED(s, image, string_field, int_field, float_field, print_to_screen):
+        return time.time()
 
 NODE_CLASS_MAPPINGS = {
     "StableAudioSampler": StableAudioSampler,
