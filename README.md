@@ -1,6 +1,10 @@
 # ComfyUI-StableAudioSampler
 The New Stable Audio Open 1.0 Sampler In a ComfyUI Node. Make some beats!
-![Screenshot from 2024-06-05 23-09-52](https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/037a23a7-0183-45b0-ae07-935664ba6dc7)
+![image](https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/477272f3-46c5-46e5-8de9-d74a93e91716)
+<audio controls>
+  <source src="assets/StableAudio_00001.wav" type="audio/wav">
+  Your browser does not support the audio element.
+</audio>
 
 # Caveats
 - The longer your audio, the more VRAM you need to stitch it together
