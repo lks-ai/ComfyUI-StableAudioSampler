@@ -65,6 +65,22 @@ def repo_path(repo, filename):
         instance_path = instance_path.replace('\\', "/")
     return instance_path
 
+import re
+def replace_variables(template, values_dict):
+    """Replace variables from a template where {} encloses a variable key from values_dict."""
+    pattern = r'\{(\w+)\}'
+
+    def replacer(match):
+        variable_name = match.group(1)
+        value = values_dict.get(variable_name, match.group(0))
+        if isinstance(value, (str, int, float, bool)):
+            return str(value)
+        return match.group(0)
+
+    result = re.sub(pattern, replacer, template)
+    return result
+
+
 def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio=None):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -121,6 +137,10 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
         init_noise_level=init_noise_level, 
         init_audio=init_audio
     )
+    
+    gendata = locals()
+    gendata['prompt'] = p_conditioning[0]['prompt']
+    gendata['negative_prompt'] = n_conditioning[0]['prompt']
 
     print("Raw Output:", output)
 
@@ -131,7 +151,7 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
     print("Transformed Output:", output)
     
     if save:
-        save_audio_files(output, sample_rate, save_prefix, counter)
+        save_audio_files(output, sample_rate, save_prefix, counter, data=gendata)
 
     spectrogram = audio_spectrogram_image(output, sample_rate=sample_rate)
     
@@ -221,13 +241,17 @@ def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pr
 
     return model, model_config
 
-def save_audio_files(output, sample_rate, filename_prefix, counter):
+def save_audio_files(output, sample_rate, filename_prefix, counter, data=None):
     filename_prefix += ""
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
-    
+    wavname = filename_prefix if not data else replace_variables(filename_prefix, data)
     for i, audio in enumerate(output):
-        file_path = os.path.join(output_dir, f"{filename_prefix}_{counter:05}.wav")
+        if i > 0: # TODO fix batches
+            break
+        fpath = f"{wavname}_{counter:04}.wav"
+        print(f"Saving audio to {fpath}")
+        file_path = os.path.join(output_dir, fpath)
         torchaudio.save(file_path, audio.unsqueeze(0), sample_rate)
         counter += 1
 
@@ -257,7 +281,7 @@ class StableAudioSampler:
                 "steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
                 "cfg_scale": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 100.0, "step": 0.1}),
                 # "sample_size": ("INT", {"default": 65536, "min": 1, "max": 1000000}),
-                "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1000.0, "step": 0.01}),
+                "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.01, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sampler_type": (SCHEDULERS, {"default": "dpmpp-3m-sde"}),
                 "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
