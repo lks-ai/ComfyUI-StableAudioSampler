@@ -49,12 +49,12 @@ Keeping track of requests and ideas as they come in:
 - Nodes
   - A Mixer Node (mix your audio outputs with some sort of mastering)
   - A Tiling Sampler (concatenate the audios)
-  - A Model Loader Node (to load audio models separately and pipe to wherever)
 - More Sampler Node Options
   - Gain
   - Possibly Clipping at some dB
   - Cleaning up some of the current options with selectors, etc.
- 
+- Upfi (upscaling fidelity)
+   
 We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool.
 
 # Feature Requests
