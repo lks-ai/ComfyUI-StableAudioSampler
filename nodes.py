@@ -49,7 +49,7 @@ class AnyType(str):
 
 base_path = os.path.dirname(os.path.realpath(__file__))
 os.makedirs(ACKPT_FOLDER, exist_ok=True)
-os.makedirs(ACKPT_FOLDER, exist_ok=True)
+os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 # Our any instance wants to be a wildcard string
 any = AnyType("*")
