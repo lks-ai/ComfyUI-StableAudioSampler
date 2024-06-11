@@ -1,0 +1,630 @@
+{
+  "last_node_id": 37,
+  "last_link_id": 53,
+  "nodes": [
+    {
+      "id": 4,
+      "type": "StableAudioPrompt",
+      "pos": [
+        640,
+        350
+      ],
+      "size": {
+        "0": 276,
+        "1": 100
+      },
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "SAOCOND",
+          "link": 13,
+          "slot_index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "SAOCOND",
+          "links": [
+            35
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StableAudioPrompt"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 18,
+      "type": "StableAudioLoadModel",
+      "pos": [
+        363,
+        500
+      ],
+      "size": {
+        "0": 315,
+        "1": 154
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "audio_model",
+          "type": "SAOMODEL",
+          "links": [
+            33
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StableAudioLoadModel"
+      },
+      "widgets_values": [
+        "model.safetensors",
+        "model_config.json",
+        "stabilityai/stable-audio-open-1.0",
+        true,
+        false
+      ]
+    },
+    {
+      "id": 35,
+      "type": "ShowText|pysssss",
+      "pos": [
+        962,
+        52
+      ],
+      "size": {
+        "0": 210,
+        "1": 80
+      },
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 48,
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null,
+          "shape": 6
+        }
+      ],
+      "title": "Show Text 🐍 Sigma Min",
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "",
+        "0.5"
+      ]
+    },
+    {
+      "id": 34,
+      "type": "AnyNode",
+      "pos": [
+        730,
+        51
+      ],
+      "size": {
+        "0": 210,
+        "1": 120
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "*",
+          "link": null
+        },
+        {
+          "name": "any2",
+          "type": "*",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "any",
+          "type": "*",
+          "links": [
+            47,
+            48
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "control",
+          "type": "CTRL",
+          "links": null,
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnyNode"
+      },
+      "widgets_values": [
+        "output a random float between 0.2 and 2.0 ... output precision should be rounded to 2 decimal places.",
+        "gpt-4o"
+      ]
+    },
+    {
+      "id": 28,
+      "type": "ShowText|pysssss",
+      "pos": [
+        950,
+        580
+      ],
+      "size": {
+        "0": 210,
+        "1": 80
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 40,
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null,
+          "shape": 6
+        }
+      ],
+      "title": "Show Text 🐍 Steps",
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "",
+        "337"
+      ]
+    },
+    {
+      "id": 27,
+      "type": "ShowText|pysssss",
+      "pos": [
+        950,
+        710
+      ],
+      "size": {
+        "0": 210,
+        "1": 80
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 39,
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null,
+          "shape": 6
+        }
+      ],
+      "title": "Show Text 🐍 CFG Scale",
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "",
+        "35.93"
+      ]
+    },
+    {
+      "id": 26,
+      "type": "AnyNode",
+      "pos": [
+        710,
+        670
+      ],
+      "size": {
+        "0": 210,
+        "1": 120
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "*",
+          "link": null
+        },
+        {
+          "name": "any2",
+          "type": "*",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "any",
+          "type": "*",
+          "links": [
+            39,
+            51
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "control",
+          "type": "CTRL",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnyNode"
+      },
+      "widgets_values": [
+        "output a random float between 7.0 and 40.0. output precision should be rounded to 2 decimal places.",
+        "gpt-4o"
+      ]
+    },
+    {
+      "id": 25,
+      "type": "AnyNode",
+      "pos": [
+        710,
+        500
+      ],
+      "size": {
+        "0": 210,
+        "1": 120
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "any",
+          "type": "*",
+          "link": null
+        },
+        {
+          "name": "any2",
+          "type": "*",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "any",
+          "type": "*",
+          "links": [
+            40,
+            53
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "control",
+          "type": "CTRL",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnyNode"
+      },
+      "widgets_values": [
+        "output a random integer between 200 and 500.",
+        "gpt-4o"
+      ]
+    },
+    {
+      "id": 10,
+      "type": "StableAudioConditioning",
+      "pos": [
+        280,
+        270
+      ],
+      "size": {
+        "0": 315,
+        "1": 106
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "SAOCOND",
+          "links": [
+            13,
+            45
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StableAudioConditioning"
+      },
+      "widgets_values": [
+        0,
+        8,
+        1
+      ]
+    },
+    {
+      "id": 33,
+      "type": "StableAudioPrompt",
+      "pos": [
+        656,
+        227
+      ],
+      "size": {
+        "0": 211.60000610351562,
+        "1": 76.00000762939453
+      },
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "SAOCOND",
+          "link": 45
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "SAOCOND",
+          "links": [
+            46
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StableAudioPrompt"
+      },
+      "widgets_values": [
+        "trance synth lead 120BPM in E Minor"
+      ]
+    },
+    {
+      "id": 24,
+      "type": "StableAudioSampler",
+      "pos": [
+        986,
+        199
+      ],
+      "size": {
+        "0": 315,
+        "1": 334
+      },
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio_model",
+          "type": "SAOMODEL",
+          "link": 33
+        },
+        {
+          "name": "positive",
+          "type": "SAOCOND",
+          "link": 46
+        },
+        {
+          "name": "negative",
+          "type": "SAOCOND",
+          "link": 35
+        },
+        {
+          "name": "audio",
+          "type": "*",
+          "link": null
+        },
+        {
+          "name": "sigma_min",
+          "type": "FLOAT",
+          "link": 47,
+          "widget": {
+            "name": "sigma_min"
+          },
+          "slot_index": 4
+        },
+        {
+          "name": "cfg_scale",
+          "type": "FLOAT",
+          "link": 51,
+          "widget": {
+            "name": "cfg_scale"
+          }
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "link": 53,
+          "widget": {
+            "name": "steps"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "*",
+          "links": [],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "sample_rate",
+          "type": "INT",
+          "links": null,
+          "shape": 3
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [],
+          "shape": 3,
+          "slot_index": 2
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StableAudioSampler"
+      },
+      "widgets_values": [
+        1991606814,
+        "fixed",
+        238,
+        10.3,
+        0.3,
+        500,
+        "dpmpp-3m-sde",
+        1,
+        true,
+        "{prompt}-{seed}-{cfg_scale}-{steps}-{sigma_min}"
+      ]
+    }
+  ],
+  "links": [
+    [
+      13,
+      10,
+      0,
+      4,
+      0,
+      "SAOCOND"
+    ],
+    [
+      33,
+      18,
+      0,
+      24,
+      0,
+      "SAOMODEL"
+    ],
+    [
+      35,
+      4,
+      0,
+      24,
+      2,
+      "SAOCOND"
+    ],
+    [
+      39,
+      26,
+      0,
+      27,
+      0,
+      "STRING"
+    ],
+    [
+      40,
+      25,
+      0,
+      28,
+      0,
+      "STRING"
+    ],
+    [
+      45,
+      10,
+      0,
+      33,
+      0,
+      "SAOCOND"
+    ],
+    [
+      46,
+      33,
+      0,
+      24,
+      1,
+      "SAOCOND"
+    ],
+    [
+      47,
+      34,
+      0,
+      24,
+      4,
+      "FLOAT"
+    ],
+    [
+      48,
+      34,
+      0,
+      35,
+      0,
+      "STRING"
+    ],
+    [
+      51,
+      26,
+      0,
+      24,
+      5,
+      "FLOAT"
+    ],
+    [
+      53,
+      25,
+      0,
+      24,
+      6,
+      "INT"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
