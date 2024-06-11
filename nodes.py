@@ -19,6 +19,7 @@ from stable_audio_tools.inference.utils import prepare_audio
 from stable_audio_tools.training.utils import copy_state_dict
 from aeiou.viz import audio_spectrogram_image
 from torchaudio import transforms as T
+import typing as tp
 
 # Test current setup
 # Add in Audio2Audio
@@ -30,20 +31,24 @@ def add_comfy_path():
     if comfy_path not in sys.path:
         sys.path.insert(0, comfy_path)
 
+
 add_comfy_path()
 
+from comfy.utils import ProgressBar # type: ignore
 import folder_paths # type: ignore
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 MAX_FP32 = np.iinfo(np.int32).max
 SCHEDULERS = ["dpmpp-3m-sde", "dpmpp-2m-sde", "k-heun", "k-lms", "k-dpmpp-2s-ancestral", "k-dpm-2", "k-dpm-fast"]
 ACKPT_FOLDER = "models/audio_checkpoints/"
+TEMP_FOLDER = "temp/"
 
 class AnyType(str):
     def __ne__(self, __value: object) -> bool:
         return False
 
 base_path = os.path.dirname(os.path.realpath(__file__))
+os.makedirs(ACKPT_FOLDER, exist_ok=True)
 os.makedirs(ACKPT_FOLDER, exist_ok=True)
 
 # Our any instance wants to be a wildcard string
@@ -80,8 +85,68 @@ def replace_variables(template, values_dict):
     result = re.sub(pattern, replacer, template)
     return result
 
+import io
+# def wav_bytes_to_tensor(wav_bytes: bytes, model, sample_rate) -> tp.Tuple[int, torch.Tensor]:
+#     # Load the audio data and sample rate using torchaudio
+#     audio_tensor, in_sr = torchaudio.load(io.BytesIO(wav_bytes))
+#     #audio_tensor = torch.from_numpy(audio_tensor).float().div(32767)
+#     print("Before Transform", audio_tensor)
+#     audio_tensor.float().div(32767)
+#     print("Converted", audio_tensor)
+#     if audio_tensor.dim() == 1:
+#         audio_tensor = audio_tensor.unsqueeze(0) # [1, n]
+#     elif audio_tensor.dim() == 2:
+#         audio_tensor = audio_tensor.transpose(0, 1) # [n, 2] -> [2, n]    print(sample_rate)
+#     print("Unsquoze", audio_tensor)
+#     if in_sr != sample_rate:
+#         resample_tf = T.Resample(in_sr, sample_rate).to(audio_tensor.device)
+#         audio_tensor = resample_tf(audio_tensor)
+#     print("Resampled", audio_tensor)
+#     dtype = next(model.parameters()).dtype
+#     audio_tensor = audio_tensor.to(dtype)
+#     print("Retyped", audio_tensor)
+#     return sample_rate, audio_tensor
 
-def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio=None):
+def wav_bytes_to_tensor(wav_bytes: bytes, model, sample_rate, sample_size: int) -> tp.Tuple[int, torch.Tensor]:
+    # Load the audio data and sample rate using torchaudio
+    audio_tensor, in_sr = torchaudio.load(io.BytesIO(wav_bytes))
+    print("Original Tensor", audio_tensor.shape, audio_tensor)
+
+    # Ensure audio tensor is [channels, samples]
+    if audio_tensor.dim() == 1:
+        audio_tensor = audio_tensor.unsqueeze(0)  # [1, n]
+    elif audio_tensor.dim() == 2 and audio_tensor.shape[0] < audio_tensor.shape[1]:
+        audio_tensor = audio_tensor.transpose(0, 1)  # [n, 2] -> [2, n]
+    print("Stereoized", audio_tensor.shape, audio_tensor)
+
+    # Resample if necessary
+    if in_sr != sample_rate:
+        resample_tf = T.Resample(in_sr, sample_rate).to(audio_tensor.device)
+        audio_tensor = resample_tf(audio_tensor)
+        print("Resampled", audio_tensor.shape, audio_tensor)
+
+    # Truncate or pad to sample_size
+    num_channels, num_samples = audio_tensor.shape
+    if num_samples > sample_size:
+        audio_tensor = audio_tensor[:, :sample_size]  # Truncate
+    elif num_samples < sample_size:
+        padding = torch.zeros((num_channels, sample_size - num_samples), dtype=audio_tensor.dtype, device=audio_tensor.device)
+        audio_tensor = torch.cat((audio_tensor, padding), dim=1)  # Pad
+    print("Truncated/Padded", audio_tensor.shape, audio_tensor)
+
+    # Convert audio tensor to the same type as model parameters
+    dtype = next(model.parameters()).dtype
+    audio_tensor = audio_tensor.to(dtype)
+    print("Final Audio Tensor:", audio_tensor.shape, audio_tensor)
+
+    # Clear intermediate variables
+    del wav_bytes, in_sr, resample_tf, padding
+    torch.cuda.empty_cache()
+    
+    return sample_rate, audio_tensor
+
+
+def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio:tp.Tuple[int, torch.Tensor]=None):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     gc.collect()
@@ -99,28 +164,30 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
     print("Sample Rate:", sample_rate)
     print("Seconds:", sample_size / sample_rate)
 
-    if init_audio is not None:
-        in_sr, init_audio = init_audio
-        # Turn into torch tensor, converting from int16 to float32
-        init_audio = torch.from_numpy(init_audio).float().div(32767)
+    # if init_audio is not None:
+    #     print(len(init_audio))
+    #     in_sr, init_audio = init_audio
+    #     # Turn into torch tensor, converting from int16 to float32
+    #     init_audio = torch.from_numpy(init_audio).float().div(32767)
         
-        if init_audio.dim() == 1:
-            init_audio = init_audio.unsqueeze(0) # [1, n]
-        elif init_audio.dim() == 2:
-            init_audio = init_audio.transpose(0, 1) # [n, 2] -> [2, n]
+    #     if init_audio.dim() == 1:
+    #         init_audio = init_audio.unsqueeze(0) # [1, n]
+    #     elif init_audio.dim() == 2:
+    #         init_audio = init_audio.transpose(0, 1) # [n, 2] -> [2, n]
 
-        if in_sr != sample_rate:
-            resample_tf = T.Resample(in_sr, sample_rate).to(init_audio.device)
-            init_audio = resample_tf(init_audio)
+    #     if in_sr != sample_rate:
+    #         resample_tf = T.Resample(in_sr, sample_rate).to(init_audio.device)
+    #         init_audio = resample_tf(init_audio)
 
-        audio_length = init_audio.shape[-1]
+    #     audio_length = init_audio.shape[-1]
 
-        if audio_length > sample_size:
+    #     if audio_length > sample_size:
 
-            input_sample_size = audio_length + (model.min_input_length - (audio_length % model.min_input_length)) % model.min_input_length
+    #         input_sample_size = audio_length + (model.min_input_length - (audio_length % model.min_input_length)) % model.min_input_length
 
-        init_audio = (sample_rate, init_audio)
+    #     init_audio = (sample_rate, init_audio)
 
+    wt = None if init_audio is None else wav_bytes_to_tensor(init_audio, model, sample_rate, sample_size)
     output = generate_diffusion_cond(
         model,
         steps=steps,
@@ -135,7 +202,7 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
         seed=seed,
         batch_size=p_batch_size,
         init_noise_level=init_noise_level, 
-        init_audio=init_audio
+        init_audio=wt,
     )
     
     gendata = locals()
@@ -241,7 +308,8 @@ def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pr
 
     return model, model_config
 
-def save_audio_files(output, sample_rate, filename_prefix, counter, data=None):
+import shutil
+def save_audio_files(output, sample_rate, filename_prefix, counter, data=None, save_temp=True):
     filename_prefix += ""
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
@@ -250,9 +318,14 @@ def save_audio_files(output, sample_rate, filename_prefix, counter, data=None):
         if i > 0: # TODO fix batches
             break
         fpath = f"{wavname}_{counter:04}.wav"
-        print(f"Saving audio to {fpath}")
         file_path = os.path.join(output_dir, fpath)
+        print(f"Saving audio to {file_path}")
         torchaudio.save(file_path, audio.unsqueeze(0), sample_rate)
+        # Saves to temporary path so it can be used for streaming loops
+        if save_temp:
+            tpath = os.path.join(TEMP_FOLDER, "stableaudiosampler.wav")
+            print(f"Saving temp audio to: {tpath}")
+            shutil.copyfile(file_path, tpath)
         counter += 1
 
 from aeiou.viz import spectrogram_image
@@ -286,7 +359,7 @@ class StableAudioSampler:
                 "sampler_type": (SCHEDULERS, {"default": "dpmpp-3m-sde"}),
                 "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "save": ("BOOLEAN", {"default": True}),
-                "save_prefix": ("STRING", {"default": "StableAudio"}),
+                "save_prefix": ("STRING", {"default": "{prompt}-{seed}-{cfg_scale}-{steps}-{sigma_min}"}),
             },
             "optional": {
                 "audio": (any, )
