@@ -1,9 +1,11 @@
 # ComfyUI-StableAudioSampler
 The New Stable Audio Open 1.0 Sampler In a ComfyUI Node. Make some beats!
 ![image](https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/477272f3-46c5-46e5-8de9-d74a93e91716)
+
 ## An Example I Pasted Together
-In this workflow, I got random `cfg_scale`, `sigma_min` and `step` values making variations on the same 16 beats; same `prompt` and `seed`.
-https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/a930b798-b25a-492c-8b03-d4fd27b78491
+In this [workflow](https://github.com/lks-ai/ComfyUI-StableAudioSampler/blob/main/workflows/audio-space-exploration.json), I got random `cfg_scale`, `sigma_min` and `step` values making variations on the same 16 beats; same `prompt` and `seed`.
+
+https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/5f43db75-cc35-47f3-999b-6f65f91420eb
 
 # Caveats
 - The longer your audio, the more VRAM you need to stitch it together
