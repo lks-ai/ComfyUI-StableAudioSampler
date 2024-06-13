@@ -64,9 +64,21 @@ Keeping track of requests and ideas as they come in:
   - Possibly Clipping at some dB
   - Cleaning up some of the current options with selectors, etc.
 - Upfi (upscaling fidelity)
-- Audio Preview Node?
-   
-We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool.
+- Audio Preview Node
+
+## Error: `progressbar`
+If you get the `progressbar` error, you can use our new utility from the latest update.
+```bash
+cd ComfyUI/custom_modules/ComfyUI-StableAudioSampler
+python util_discrepancies.py progressbar
+```
+You will see something like this...
+![Screenshot from 2024-06-13 13-02-30](https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/5ce10eb3-d841-4d21-bd48-93d697cff3d8)
+In this screenshot, you see `protobuf` but that is only because I don't have version issues with `progressbar`.
+**Note**: If I install one of those version suggestions, StableAudioSampler should work, but at the same time, it might make other packages not work.
+
+# Contributions   
+We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool. If it's already on the roadmap, chances are we're already working on it, so check in with us. We will start a dev branch.
 
 # Feature Requests
 If you have a request for a feature, open an issue about it and it will be seen.
