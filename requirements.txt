@@ -1,1 +1,6 @@
 stable-audio-tools
+torch
+torchaudio
+einops
+numpy
+aeiou
