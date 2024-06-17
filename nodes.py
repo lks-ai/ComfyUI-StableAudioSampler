@@ -27,7 +27,7 @@ try:
 except ImportError as e:
     checker = PackageDependencyChecker()
     discrepancies = checker.check_version_discrepancies('requirements.txt')
-    instructions = checker.generate_user_instructions(discrepancies)
+    #instructions = checker.generate_user_instructions(discrepancies)
 
     # Find dependent discrepancies for all packages with issues
     dependent_discrepancies = []
@@ -43,7 +43,7 @@ except ImportError as e:
     for suggestion in solution_suggestions:
         out += f"{suggestion}\n"
     
-    raise ValueError(f"<<StableAudioSampler>>: You Have some Environment Problems...\n\n{instructions}\n{out}")
+    raise ValueError(f"<<StableAudioSampler>>: You Have some Environment Problems...\n\n{out}")
 
 # Test current setup
 # Add in Audio2Audio
@@ -241,8 +241,9 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
     output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
     print("Transformed Output:", output)
     
+    filepaths = None
     if save:
-        save_audio_files(output, sample_rate, save_prefix, counter, data=gendata)
+        filepaths = save_audio_files(output, sample_rate, save_prefix, counter, data=gendata)
 
     spectrogram = audio_spectrogram_image(output, sample_rate=sample_rate)
     
@@ -253,7 +254,7 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
         torch.cuda.empty_cache()
     gc.collect()
     
-    return audio_bytes, sample_rate, spectrogram
+    return audio_bytes, sample_rate, spectrogram, filepaths
 
 
 def get_model(model_filename=None, config=None, repo=None, half_precision=False, device_override=None):
@@ -333,24 +334,28 @@ def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pr
     return model, model_config
 
 import shutil
+from urllib.parse import quote
 def save_audio_files(output, sample_rate, filename_prefix, counter, data=None, save_temp=True):
     filename_prefix += ""
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
     wavname = filename_prefix if not data else replace_variables(filename_prefix, data)
+    filepaths = []
     for i, audio in enumerate(output):
         if i > 0: # TODO fix batches
             break
-        fpath = f"{wavname}_{counter:04}.wav"
+        fpath = f"{quote(wavname)}_{counter:04}.wav"
         file_path = os.path.join(output_dir, fpath)
         print(f"Saving audio to {file_path}")
         torchaudio.save(file_path, audio.unsqueeze(0), sample_rate)
+        filepaths.append(fpath)
         # Saves to temporary path so it can be used for streaming loops
         if save_temp:
             tpath = os.path.join(TEMP_FOLDER, "stableaudiosampler.wav")
             print(f"Saving temp audio to: {tpath}")
             shutil.copyfile(file_path, tpath)
         counter += 1
+    return filepaths
 
 from aeiou.viz import spectrogram_image
 
@@ -372,8 +377,8 @@ class StableAudioSampler:
         return {
             "required": {
                 "audio_model": ("SAOMODEL", {"forceInput": True}),
-                "positive": ("SAOCOND", {"forceInput": True}),
-                "negative": ("SAOCOND", {"forceInput": True}),
+                "positive": ("CONDITIONING", {"forceInput": True}),
+                "negative": ("CONDITIONING", {"forceInput": True}),
                 "seed": ("INT", {"default": -1, "min": -1, "max": MAX_FP32}),
                 "steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
                 "cfg_scale": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 100.0, "step": 0.1}),
@@ -398,9 +403,10 @@ class StableAudioSampler:
     CATEGORY = "audio/samplers"
 
     def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, audio=None):
-        audio_bytes, sample_rate, spectrogram = generate_audio((positive, negative), steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise, init_audio=audio)
+        audio_bytes, sample_rate, spectrogram, filepaths = generate_audio((positive, negative), steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise, init_audio=audio)
         spectrograms = create_image_batch([spectrogram], 1)
-        return (audio_bytes, sample_rate, spectrograms)
+        return {"ui": {"paths": filepaths}, "result": (audio_bytes, sample_rate, spectrograms)}
+        #return (audio_bytes, sample_rate, spectrograms)
 
 class StableLoadAudioModel:
     @classmethod
@@ -433,12 +439,12 @@ class StableAudioPrompt:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "conditioning": ("SAOCOND", {"forceInput": True}),
+                "conditioning": ("CONDITIONING", {"forceInput": True}),
                 "prompt": ("STRING", {"multiline": True}),
             }
         }
  
-    RETURN_TYPES = ("SAOCOND", )
+    RETURN_TYPES = ("CONDITIONING", )
     RETURN_NAMES = ("conditioning", )
     FUNCTION = "go"
 
@@ -475,7 +481,7 @@ class StableAudioConditioning:
             }
         }
  
-    RETURN_TYPES = ("SAOCOND", )
+    RETURN_TYPES = ("CONDITIONING", )
     RETURN_NAMES = ("conditioning", )
     FUNCTION = "go"
 

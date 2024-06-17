@@ -4,3 +4,4 @@ torchaudio
 einops
 numpy
 aeiou
+flash_attn
