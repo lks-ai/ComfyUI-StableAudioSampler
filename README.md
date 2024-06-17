@@ -1,10 +1,11 @@
 # ComfyUI-StableAudioSampler
 The New Stable Audio Open 1.0 Sampler In a ComfyUI Node. Make some beats!
 ![image](https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/477272f3-46c5-46e5-8de9-d74a93e91716)
-<audio controls>
-  <source src="assets/StableAudio_00001.wav" type="audio/wav">
-  Your browser does not support the audio element.
-</audio>
+
+## An Example I Pasted Together
+In this [workflow](https://github.com/lks-ai/ComfyUI-StableAudioSampler/blob/main/workflows/audio-space-exploration.json), I got random `cfg_scale`, `sigma_min` and `step` values making variations on the same 16 beats; same `prompt` and `seed`. **VOLUME WARNING!**
+
+https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/5f43db75-cc35-47f3-999b-6f65f91420eb
 
 # Caveats
 - The longer your audio, the more VRAM you need to stitch it together
@@ -36,12 +37,21 @@ This is not an official StableAudioOpen repository.
   - A Prompt Node: Pipes conditioning
   - A Model Loading Node: Includes repo options and scans `models/audio_checkpoints` for models and config.json files
 - `control_after_generate` option
-- Audio to Audio (like in the Gradio Example)
+- Audio to Audio (like in the Gradio Example) **Still working on fix for this**
 - Can still use HF env key if you want
 - Generates audio and outputs raw bytes and a sample rate for use with VHS
 - Includes all of the original Stable Audio Open parameters
 - Sampler outputs a Spectrogram image (experimental)
 - Can save audio to file
+- New Prefix Templates for save file naming
+- Outputs a temporary `wav` to `temp/stableaudiosampler.wav` you can use for looping like in [this video](https://www.youtube.com/watch?v=_eR6tP-c8W4).
+
+### Example Workflows
+#### [Exploring Same Prompt and Seed](https://github.com/lks-ai/ComfyUI-StableAudioSampler/blob/main/workflows/audio-space-exploration.json)
+
+The part I use AnyNode for is just getting random values within a range for `cfg_scale`, `steps` and `sigma_min` thanks to feedback from the community and some tinkering, I think I found a way in this workflow to just get endless sequences of the same seed/prompt in any key (because I mentioned what key the synth lead needed to be in).
+
+With the new save prefix templating, it makes it easy to just look at the file and know what settings (since wav doesn't have PNGinfo)
 
 ## Roadmap and Requested Features
 Keeping track of requests and ideas as they come in:
@@ -54,8 +64,21 @@ Keeping track of requests and ideas as they come in:
   - Possibly Clipping at some dB
   - Cleaning up some of the current options with selectors, etc.
 - Upfi (upscaling fidelity)
-   
-We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool.
+- Audio Preview Node
+
+## Error: `progressbar`
+If you get the `progressbar` error, you can use our new utility from the latest update.
+```bash
+cd ComfyUI/custom_modules/ComfyUI-StableAudioSampler
+python util_discrepancies.py progressbar
+```
+You will see something like this...
+![Screenshot from 2024-06-13 13-02-30](https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/5ce10eb3-d841-4d21-bd48-93d697cff3d8)
+In this screenshot, you see `protobuf` but that is only because I don't have version issues with `progressbar`.
+**Note**: If I install one of those version suggestions, StableAudioSampler should work, but at the same time, it might make other packages not work.
+
+# Contributions   
+We are very open to anyone who wants to contribute from the open source community. Make your forks and pull requests. We will build something cool. If it's already on the roadmap, chances are we're already working on it, so check in with us. We will start a dev branch.
 
 # Feature Requests
 If you have a request for a feature, open an issue about it and it will be seen.
