@@ -4,46 +4,46 @@ import typing as tp
 
 from .util_dependencies import PackageDependencyChecker
 
-try:
-    import torch
-    import torchaudio
-    from einops import rearrange
-    from stable_audio_tools import get_pretrained_model
-    from stable_audio_tools.inference.generation import generate_diffusion_cond
-    import numpy as np
-    from safetensors.torch import load_file
-    from .util_config import get_model_config
-    # from stable_audio_tools.models.factory import create_model_from_config
-    # from stable_audio_tools.models.utils import load_ckpt_state_dict
-    from stable_audio_tools import get_pretrained_model, create_model_from_config
-    # from stable_audio_tools.inference.generation import generate_diffusion_cond
-    from stable_audio_tools.models.utils import load_ckpt_state_dict
+# try:
+import torch
+import torchaudio
+from einops import rearrange
+from stable_audio_tools import get_pretrained_model
+from stable_audio_tools.inference.generation import generate_diffusion_cond
+import numpy as np
+from safetensors.torch import load_file
+from .util_config import get_model_config
+# from stable_audio_tools.models.factory import create_model_from_config
+# from stable_audio_tools.models.utils import load_ckpt_state_dict
+from stable_audio_tools import get_pretrained_model, create_model_from_config
+# from stable_audio_tools.inference.generation import generate_diffusion_cond
+from stable_audio_tools.models.utils import load_ckpt_state_dict
 
-    from stable_audio_tools.inference.generation import generate_diffusion_cond, generate_diffusion_uncond
-    from stable_audio_tools.inference.utils import prepare_audio
-    from stable_audio_tools.training.utils import copy_state_dict
-    from aeiou.viz import audio_spectrogram_image
-    from torchaudio import transforms as T
-except ImportError as e:
-    checker = PackageDependencyChecker()
-    discrepancies = checker.check_version_discrepancies('requirements.txt')
-    #instructions = checker.generate_user_instructions(discrepancies)
+from stable_audio_tools.inference.generation import generate_diffusion_cond, generate_diffusion_uncond
+from stable_audio_tools.inference.utils import prepare_audio
+from stable_audio_tools.training.utils import copy_state_dict
+from aeiou.viz import audio_spectrogram_image
+from torchaudio import transforms as T
+# except ImportError as e:
+#     checker = PackageDependencyChecker()
+#     discrepancies = checker.check_version_discrepancies('requirements.txt')
+#     #instructions = checker.generate_user_instructions(discrepancies)
 
-    # Find dependent discrepancies for all packages with issues
-    dependent_discrepancies = []
-    for discrepancy in discrepancies:
-        package_name = discrepancy['package_name']
-        dependent_discrepancies.extend(checker.check_dependents_discrepancies(package_name))
+#     # Find dependent discrepancies for all packages with issues
+#     dependent_discrepancies = []
+#     for discrepancy in discrepancies:
+#         package_name = discrepancy['package_name']
+#         dependent_discrepancies.extend(checker.check_dependents_discrepancies(package_name))
     
-    # Analyze discrepancies and suggest solutions
-    solutions = checker.analyze_discrepancies(discrepancies + dependent_discrepancies)
-    solution_suggestions = checker.suggest_solutions(solutions)
+#     # Analyze discrepancies and suggest solutions
+#     solutions = checker.analyze_discrepancies(discrepancies + dependent_discrepancies)
+#     solution_suggestions = checker.suggest_solutions(solutions)
     
-    out = "\nSuggested solutions:\n"
-    for suggestion in solution_suggestions:
-        out += f"{suggestion}\n"
+#     out = "\nSuggested solutions:\n"
+#     for suggestion in solution_suggestions:
+#         out += f"{suggestion}\n"
     
-    raise ValueError(f"<<StableAudioSampler>>: You Have some Environment Problems...\n\n{out}")
+#     raise ValueError(f"<<StableAudioSampler>>: You Have some Environment Problems...\n\n{out}")
 
 # Test current setup
 # Add in Audio2Audio
