@@ -131,41 +131,55 @@ import io
 #     print("Retyped", audio_tensor)
 #     return sample_rate, audio_tensor
 
-def wav_bytes_to_tensor(wav_bytes: bytes, model, sample_rate, sample_size: int) -> tp.Tuple[int, torch.Tensor]:
-    # Load the audio data and sample rate using torchaudio
-    audio_tensor, in_sr = torchaudio.load(io.BytesIO(wav_bytes))
-    print("Original Tensor", audio_tensor.shape, audio_tensor)
+def wav_bytes_to_tensor(wav_bytes: tp.Union[bytes, dict], model, sample_rate, sample_size: int) -> tp.Tuple[int, torch.Tensor]:
+    # Handle dictionary input case
+    if isinstance(wav_bytes, dict):
+        if 'waveform' in wav_bytes:
+            # Handle ComfyUI LoadAudio format
+            audio_tensor = wav_bytes['waveform']
+            in_sr = wav_bytes.get('sample_rate', sample_rate)
+        elif 'path' in wav_bytes:
+            # Load from file path
+            audio_tensor, in_sr = torchaudio.load(wav_bytes['path'])
+        elif 'tensor' in wav_bytes:
+            # Direct tensor data
+            audio_tensor = wav_bytes['tensor']
+            in_sr = wav_bytes.get('sample_rate', sample_rate)
+        elif 'filename' in wav_bytes:
+            # Load from filename
+            audio_tensor, in_sr = torchaudio.load(wav_bytes['filename'])
+        else:
+            print("Audio dictionary contents:", wav_bytes.keys())
+            raise ValueError("Invalid audio dictionary format - must contain 'waveform', 'path', 'tensor', or 'filename' key")
+    else:
+        # Original bytes handling
+        audio_tensor, in_sr = torchaudio.load(io.BytesIO(wav_bytes))
 
-    # Ensure audio tensor is [channels, samples]
-    if audio_tensor.dim() == 1:
-        audio_tensor = audio_tensor.unsqueeze(0)  # [1, n]
-    elif audio_tensor.dim() == 2 and audio_tensor.shape[0] < audio_tensor.shape[1]:
-        audio_tensor = audio_tensor.transpose(0, 1)  # [n, 2] -> [2, n]
-    print("Stereoized", audio_tensor.shape, audio_tensor)
-
-    # Resample if necessary
+    # Handle different tensor shapes
+    if audio_tensor.dim() == 3:
+        # If we have a 3D tensor [batch, channels, samples], squeeze out the batch dimension
+        audio_tensor = audio_tensor.squeeze(0)
+    elif audio_tensor.dim() == 1:
+        # If we have a 1D tensor [samples], add channel dimension
+        audio_tensor = audio_tensor.unsqueeze(0)
+    
+    # Ensure we have [channels, samples] format
+    if audio_tensor.shape[0] > audio_tensor.shape[-1]:
+        audio_tensor = audio_tensor.transpose(0, -1)
+    
     if in_sr != sample_rate:
         resample_tf = T.Resample(in_sr, sample_rate).to(audio_tensor.device)
         audio_tensor = resample_tf(audio_tensor)
-        print("Resampled", audio_tensor.shape, audio_tensor)
 
-    # Truncate or pad to sample_size
     num_channels, num_samples = audio_tensor.shape
     if num_samples > sample_size:
-        audio_tensor = audio_tensor[:, :sample_size]  # Truncate
+        audio_tensor = audio_tensor[:, :sample_size]
     elif num_samples < sample_size:
         padding = torch.zeros((num_channels, sample_size - num_samples), dtype=audio_tensor.dtype, device=audio_tensor.device)
-        audio_tensor = torch.cat((audio_tensor, padding), dim=1)  # Pad
-    print("Truncated/Padded", audio_tensor.shape, audio_tensor)
+        audio_tensor = torch.cat((audio_tensor, padding), dim=1)
 
-    # Convert audio tensor to the same type as model parameters
     dtype = next(model.parameters()).dtype
     audio_tensor = audio_tensor.to(dtype)
-    print("Final Audio Tensor:", audio_tensor.shape, audio_tensor)
-
-    # Clear intermediate variables
-    del wav_bytes, in_sr, resample_tf, padding
-    torch.cuda.empty_cache()
     
     return sample_rate, audio_tensor
 
@@ -386,7 +400,7 @@ class StableAudioSampler:
                 "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.01, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sampler_type": (SCHEDULERS, {"default": "dpmpp-3m-sde"}),
-                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 20.0, "step": 0.01}),
                 "save": ("BOOLEAN", {"default": True}),
                 "save_prefix": ("STRING", {"default": "{prompt}-{seed}-{cfg_scale}-{steps}-{sigma_min}"}),
             },
