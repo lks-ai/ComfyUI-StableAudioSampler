@@ -210,7 +210,7 @@ def wav_bytes_to_tensor(wav_bytes: tp.Union[bytes, dict], model, sample_rate, sa
     return sample_rate, audio_tensor
 
 
-def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio:tp.Tuple[int, torch.Tensor]=None):
+def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio=None, quantum=True):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     gc.collect()
@@ -267,6 +267,7 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
         batch_size=p_batch_size,
         init_noise_level=init_noise_level, 
         init_audio=wt,
+        quantum=quantum
     )
     
     gendata = locals()
@@ -429,6 +430,7 @@ class StableAudioSampler:
                 "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 20.0, "step": 0.01}),
                 "save": ("BOOLEAN", {"default": True}),
                 "save_prefix": ("STRING", {"default": "{prompt}-{seed}-{cfg_scale}-{steps}-{sigma_min}"}),
+                "quantum": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "audio": (any, )
@@ -442,8 +444,24 @@ class StableAudioSampler:
 
     CATEGORY = "audio/samplers"
 
-    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, audio=None):
-        audio_bytes, sample_rate, spectrogram, filepaths = generate_audio((positive, negative), steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise, init_audio=audio)
+    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, quantum=True, audio=None):
+        audio_bytes, sample_rate, spectrogram, filepaths = generate_audio(
+            (positive, negative), 
+            steps, 
+            cfg_scale, 
+            sigma_min, 
+            sigma_max, 
+            sampler_type, 
+            device, 
+            save, 
+            save_prefix, 
+            audio_model, 
+            seed=seed, 
+            counter=self.counter, 
+            init_noise_level=denoise, 
+            init_audio=audio,
+            quantum=quantum
+        )
         spectrograms = create_image_batch([spectrogram], 1)
         return {"ui": {"paths": filepaths}, "result": (audio_bytes, sample_rate, spectrograms)}
         #return (audio_bytes, sample_rate, spectrograms)
