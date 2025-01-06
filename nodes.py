@@ -377,10 +377,18 @@ def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pr
 import shutil
 from urllib.parse import quote
 def save_audio_files(output, sample_rate, filename_prefix, counter, data=None, save_temp=True):
+    from datetime import datetime
+    
     filename_prefix += ""
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
-    wavname = filename_prefix if not data else replace_variables(filename_prefix, data)
+    
+    # Get current datetime and format it
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create filename with datetime
+    wavname = f"{current_time}_{filename_prefix}" if not data else f"{current_time}_{replace_variables(filename_prefix, data)}"
+    
     filepaths = []
     for i, audio in enumerate(output):
         if i > 0: # TODO fix batches

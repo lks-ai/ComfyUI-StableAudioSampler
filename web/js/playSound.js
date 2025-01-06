@@ -25,12 +25,12 @@ app.registerExtension({
 					file = "temp/stableaudiosampler.wav";
 				}
 
-				const url = new URL(`http://localhost:8188/view?filename=${encodeURIComponent(file)}&subfolder=&type=output&format=audio%2Fwav`);
-				console.log(import.meta.url)
-				console.log(url)
-				const audio = new Audio(url);
-				audio.volume = 1.0; //this.widgets[1].value;
-				audio.play();
+				// const url = new URL(`http://localhost:8188/view?filename=${encodeURIComponent(file)}&subfolder=&type=output&format=audio%2Fwav`);
+				// console.log(import.meta.url)
+				// console.log(url)
+				// const audio = new Audio(url);
+				// audio.volume = 1.0; //this.widgets[1].value;
+				// audio.play();
 			};
 		}
 	},
