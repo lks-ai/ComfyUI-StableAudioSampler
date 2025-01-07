@@ -1,8 +1,34 @@
 import os, sys, json, gc
 import glob
 import typing as tp
+import numpy as np
+import torch
+import torchaudio
+from einops import rearrange
+from safetensors.torch import load_file
+from torchaudio import transforms as T
+from aeiou.viz import audio_spectrogram_image
 
 from .util_dependencies import PackageDependencyChecker
+from .util_config import get_model_config
+
+# Add local stable-audio-tools to path
+def add_stable_audio_tools_path():
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    # Updated path to point to custom-extensions
+    stable_audio_path = os.path.abspath(os.path.join(current_path, '../../custom-extensions/stable-audio-tools'))
+    if stable_audio_path not in sys.path:
+        sys.path.insert(0, stable_audio_path)
+        print(f"[comfyui-stable-audio-sampler, nodes.py, add_stable_audio_tools_path] Added stable-audio-tools path: {stable_audio_path}")
+
+add_stable_audio_tools_path()
+
+# Import stable-audio-tools after path modification
+from stable_audio_tools import get_pretrained_model, create_model_from_config
+from stable_audio_tools.inference.generation import generate_diffusion_cond, generate_diffusion_uncond
+from stable_audio_tools.inference.utils import prepare_audio
+from stable_audio_tools.models.utils import load_ckpt_state_dict
+from stable_audio_tools.training.utils import copy_state_dict
 
 # try:
 import torch
@@ -131,46 +157,60 @@ import io
 #     print("Retyped", audio_tensor)
 #     return sample_rate, audio_tensor
 
-def wav_bytes_to_tensor(wav_bytes: bytes, model, sample_rate, sample_size: int) -> tp.Tuple[int, torch.Tensor]:
-    # Load the audio data and sample rate using torchaudio
-    audio_tensor, in_sr = torchaudio.load(io.BytesIO(wav_bytes))
-    print("Original Tensor", audio_tensor.shape, audio_tensor)
+def wav_bytes_to_tensor(wav_bytes: tp.Union[bytes, dict], model, sample_rate, sample_size: int) -> tp.Tuple[int, torch.Tensor]:
+    # Handle dictionary input case
+    if isinstance(wav_bytes, dict):
+        if 'waveform' in wav_bytes:
+            # Handle ComfyUI LoadAudio format
+            audio_tensor = wav_bytes['waveform']
+            in_sr = wav_bytes.get('sample_rate', sample_rate)
+        elif 'path' in wav_bytes:
+            # Load from file path
+            audio_tensor, in_sr = torchaudio.load(wav_bytes['path'])
+        elif 'tensor' in wav_bytes:
+            # Direct tensor data
+            audio_tensor = wav_bytes['tensor']
+            in_sr = wav_bytes.get('sample_rate', sample_rate)
+        elif 'filename' in wav_bytes:
+            # Load from filename
+            audio_tensor, in_sr = torchaudio.load(wav_bytes['filename'])
+        else:
+            print("Audio dictionary contents:", wav_bytes.keys())
+            raise ValueError("Invalid audio dictionary format - must contain 'waveform', 'path', 'tensor', or 'filename' key")
+    else:
+        # Original bytes handling
+        audio_tensor, in_sr = torchaudio.load(io.BytesIO(wav_bytes))
 
-    # Ensure audio tensor is [channels, samples]
-    if audio_tensor.dim() == 1:
-        audio_tensor = audio_tensor.unsqueeze(0)  # [1, n]
-    elif audio_tensor.dim() == 2 and audio_tensor.shape[0] < audio_tensor.shape[1]:
-        audio_tensor = audio_tensor.transpose(0, 1)  # [n, 2] -> [2, n]
-    print("Stereoized", audio_tensor.shape, audio_tensor)
-
-    # Resample if necessary
+    # Handle different tensor shapes
+    if audio_tensor.dim() == 3:
+        # If we have a 3D tensor [batch, channels, samples], squeeze out the batch dimension
+        audio_tensor = audio_tensor.squeeze(0)
+    elif audio_tensor.dim() == 1:
+        # If we have a 1D tensor [samples], add channel dimension
+        audio_tensor = audio_tensor.unsqueeze(0)
+    
+    # Ensure we have [channels, samples] format
+    if audio_tensor.shape[0] > audio_tensor.shape[-1]:
+        audio_tensor = audio_tensor.transpose(0, -1)
+    
     if in_sr != sample_rate:
         resample_tf = T.Resample(in_sr, sample_rate).to(audio_tensor.device)
         audio_tensor = resample_tf(audio_tensor)
-        print("Resampled", audio_tensor.shape, audio_tensor)
 
-    # Truncate or pad to sample_size
     num_channels, num_samples = audio_tensor.shape
     if num_samples > sample_size:
-        audio_tensor = audio_tensor[:, :sample_size]  # Truncate
+        audio_tensor = audio_tensor[:, :sample_size]
     elif num_samples < sample_size:
         padding = torch.zeros((num_channels, sample_size - num_samples), dtype=audio_tensor.dtype, device=audio_tensor.device)
-        audio_tensor = torch.cat((audio_tensor, padding), dim=1)  # Pad
-    print("Truncated/Padded", audio_tensor.shape, audio_tensor)
+        audio_tensor = torch.cat((audio_tensor, padding), dim=1)
 
-    # Convert audio tensor to the same type as model parameters
     dtype = next(model.parameters()).dtype
     audio_tensor = audio_tensor.to(dtype)
-    print("Final Audio Tensor:", audio_tensor.shape, audio_tensor)
-
-    # Clear intermediate variables
-    del wav_bytes, in_sr, resample_tf, padding
-    torch.cuda.empty_cache()
     
     return sample_rate, audio_tensor
 
 
-def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio:tp.Tuple[int, torch.Tensor]=None):
+def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, modelinfo, batch_size=1, seed=-1, after_generate="randomize", counter=0, init_noise_level=1.0, init_audio=None, quantum=True):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     gc.collect()
@@ -182,11 +222,11 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
     sample_size = p_conditioning[0]['seconds_total'] * sample_rate
 
     #dprint("Model Loaded:", model)
-    print("Positive Conditioning:", p_conditioning)
-    print("Negative Conditioning:", n_conditioning)
-    print("Sample Size:", sample_size)
-    print("Sample Rate:", sample_rate)
-    print("Seconds:", sample_size / sample_rate)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Positive Conditioning:", p_conditioning)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Negative Conditioning:", n_conditioning)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Sample Size:", sample_size)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Sample Rate:", sample_rate)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Seconds:", sample_size / sample_rate)
 
     # if init_audio is not None:
     #     print(len(init_audio))
@@ -227,19 +267,20 @@ def generate_audio(cond_batch, steps, cfg_scale, sigma_min, sigma_max, sampler_t
         batch_size=p_batch_size,
         init_noise_level=init_noise_level, 
         init_audio=wt,
+        quantum=quantum
     )
     
     gendata = locals()
     gendata['prompt'] = p_conditioning[0]['prompt']
     gendata['negative_prompt'] = n_conditioning[0]['prompt']
 
-    print("Raw Output:", output)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Raw Output:", output)
 
     output = rearrange(output, "b d n -> d (b n)")
-    print("Rearranged Output:", output)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Rearranged Output:", output)
 
     output = output.to(torch.float32).div(torch.max(torch.abs(output))).clamp(-1, 1).mul(32767).to(torch.int16).cpu()
-    print("Transformed Output:", output)
+    print("[comfyui-stable-audio-sampler, nodes.py, generate_audio] Transformed Output:", output)
     
     filepaths = None
     if save:
@@ -268,17 +309,17 @@ def get_model(model_filename=None, config=None, repo=None, half_precision=False,
                 with open(config, 'r') as f:
                     model_config = json.load(f)
             model = create_model_from_config(model_config)
-            print(model_path)
+            print(f"[comfyui-stable-audio-sampler, nodes.py, get_model] Model path: {model_path}")
             model.load_state_dict(load_ckpt_state_dict(model_path))
         else:
             repo_id = "stabilityai/stable-audio-open-1.0" if not repo else repo
-            print(f"Loading pretrained model {repo_id}")
+            print(f"[comfyui-stable-audio-sampler, nodes.py, get_model] Loading pretrained model {repo_id}")
             model, model_config = get_pretrained_model(repo_id)
         sample_rate = model_config["sample_rate"]
         sample_size = model_config["sample_size"]
     elif repo:
         if repo == "stabilityai/stable-audio-open-1.0":
-            print(f"Loading pretrained model {repo}")
+            print(f"[comfyui-stable-audio-sampler, nodes.py, get_model] Loading pretrained model {repo}")
             model, model_config = get_pretrained_model(repo)
         else:
             json_path = config or repo_path(repo, "model_config.json")
@@ -304,14 +345,14 @@ def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pr
     global model, sample_rate, sample_size
     
     if pretrained_name is not None:
-        print(f"Loading pretrained model {pretrained_name}")
+        print(f"[comfyui-stable-audio-sampler, nodes.py, load_model] Loading pretrained model {pretrained_name}")
         model, model_config = get_pretrained_model(pretrained_name)
 
     elif model_config is not None and model_ckpt_path is not None:
-        print(f"Creating model from config")
+        print(f"[comfyui-stable-audio-sampler, nodes.py, load_model] Creating model from config")
         model = create_model_from_config(model_config)
 
-        print(f"Loading model checkpoint from {model_ckpt_path}")
+        print(f"[comfyui-stable-audio-sampler, nodes.py, load_model] Loading model checkpoint from {model_ckpt_path}")
         # Load checkpoint
         copy_state_dict(model, load_ckpt_state_dict(model_ckpt_path))
         #model.load_state_dict(load_ckpt_state_dict(model_ckpt_path))
@@ -320,39 +361,47 @@ def load_model(model_config=None, model_ckpt_path=None, pretrained_name=None, pr
     sample_size = model_config["sample_size"]
 
     if pretransform_ckpt_path is not None:
-        print(f"Loading pretransform checkpoint from {pretransform_ckpt_path}")
+        print(f"[comfyui-stable-audio-sampler, nodes.py, load_model] Loading pretransform checkpoint from {pretransform_ckpt_path}")
         model.pretransform.load_state_dict(load_ckpt_state_dict(pretransform_ckpt_path), strict=False)
-        print(f"Done loading pretransform")
+        print(f"[comfyui-stable-audio-sampler, nodes.py, load_model] Done loading pretransform")
 
     model.to(device).eval().requires_grad_(False)
 
     if model_half:
         model.to(torch.float16)
         
-    print(f"Done loading model")
+    print(f"[comfyui-stable-audio-sampler, nodes.py, load_model] Done loading model")
 
     return model, model_config
 
 import shutil
 from urllib.parse import quote
 def save_audio_files(output, sample_rate, filename_prefix, counter, data=None, save_temp=True):
+    from datetime import datetime
+    
     filename_prefix += ""
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
-    wavname = filename_prefix if not data else replace_variables(filename_prefix, data)
+    
+    # Get current datetime and format it
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create filename with datetime
+    wavname = f"{current_time}_{filename_prefix}" if not data else f"{current_time}_{replace_variables(filename_prefix, data)}"
+    
     filepaths = []
     for i, audio in enumerate(output):
         if i > 0: # TODO fix batches
             break
         fpath = f"{quote(wavname)}_{counter:04}.wav"
         file_path = os.path.join(output_dir, fpath)
-        print(f"Saving audio to {file_path}")
+        print(f"[comfyui-stable-audio-sampler, nodes.py, save_audio_files] Saving audio to {file_path}")
         torchaudio.save(file_path, audio.unsqueeze(0), sample_rate)
         filepaths.append(fpath)
         # Saves to temporary path so it can be used for streaming loops
         if save_temp:
             tpath = os.path.join(TEMP_FOLDER, "stableaudiosampler.wav")
-            print(f"Saving temp audio to: {tpath}")
+            print(f"[comfyui-stable-audio-sampler, nodes.py, save_audio_files] Saving temp audio to: {tpath}")
             shutil.copyfile(file_path, tpath)
         counter += 1
     return filepaths
@@ -386,9 +435,10 @@ class StableAudioSampler:
                 "sigma_min": ("FLOAT", {"default": 0.3, "min": 0.01, "max": 1000.0, "step": 0.01}),
                 "sigma_max": ("FLOAT", {"default": 500.0, "min": 0.0, "max": 1000.0, "step": 0.01}),
                 "sampler_type": (SCHEDULERS, {"default": "dpmpp-3m-sde"}),
-                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 20.0, "step": 0.01}),
                 "save": ("BOOLEAN", {"default": True}),
                 "save_prefix": ("STRING", {"default": "{prompt}-{seed}-{cfg_scale}-{steps}-{sigma_min}"}),
+                "quantum": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "audio": (any, )
@@ -402,8 +452,24 @@ class StableAudioSampler:
 
     CATEGORY = "audio/samplers"
 
-    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, audio=None):
-        audio_bytes, sample_rate, spectrogram, filepaths = generate_audio((positive, negative), steps, cfg_scale, sigma_min, sigma_max, sampler_type, device, save, save_prefix, audio_model, seed=seed, counter=self.counter, init_noise_level=denoise, init_audio=audio)
+    def sample(self, audio_model, positive, negative, seed, steps, cfg_scale, sigma_min, sigma_max, sampler_type, denoise, save, save_prefix, quantum=True, audio=None):
+        audio_bytes, sample_rate, spectrogram, filepaths = generate_audio(
+            (positive, negative), 
+            steps, 
+            cfg_scale, 
+            sigma_min, 
+            sigma_max, 
+            sampler_type, 
+            device, 
+            save, 
+            save_prefix, 
+            audio_model, 
+            seed=seed, 
+            counter=self.counter, 
+            init_noise_level=denoise, 
+            init_audio=audio,
+            quantum=quantum
+        )
         spectrograms = create_image_batch([spectrogram], 1)
         return {"ui": {"paths": filepaths}, "result": (audio_bytes, sample_rate, spectrograms)}
         #return (audio_bytes, sample_rate, spectrograms)
@@ -451,9 +517,9 @@ class StableAudioPrompt:
     CATEGORY = "audio/conditioning"
 
     def go(self, conditioning, prompt):
-        print("PROMPT", prompt)
+        print("[comfyui-stable-audio-sampler, nodes.py, go] PROMPT", prompt)
         cond, batch_size = conditioning
-        print(cond, batch_size)
+        print("[comfyui-stable-audio-sampler, nodes.py, go]  cond, batch_size", cond, batch_size)
         o = []
         #cond[0]['prompt'] = prompt
         for v in cond:
@@ -465,7 +531,7 @@ class StableAudioPrompt:
         #     "seconds_start": seconds_start,
         #     "seconds_total": seconds_total
         # }]
-        print(o, batch_size)
+        print("[comfyui-stable-audio-sampler, nodes.py, go] o, batch_size", o, batch_size)
         return ((o, batch_size), )
 
 import time
