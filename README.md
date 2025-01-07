@@ -14,13 +14,13 @@ https://github.com/lks-ai/ComfyUI-StableAudioSampler/assets/163685473/5f43db75-c
 ## Installation
 
 ### Download the Model and Config
-1. Go to [Stable Audio Open on HuggingFace](https://huggingface.co/stabilityai/stable-audio-open-1.0/blob/main/) and download the `model.safetensors` and `model.config.json` files.
+1. Go to [Stable Audio Open on HuggingFace](https://huggingface.co/stabilityai/stable-audio-open-1.0/tree/main/) and download the `model.safetensors` and `model.config.json` files.
 2. Place the files in the `models/audio_checkpoints` folder. If you don't have one, make one in your comfy folder.
 3. Open Comfy and StableAudioLoader will see your model and config
 
 ### With a HuggingFace Token
 1. Make sure you have your `HF_TOKEN` environment variable for hugging face because model loading doesn't work just yet directly from a saved file
-2. Go ahead and download model from here for when we fix that [Stable Audio Open on HuggingFace](https://huggingface.co/stabilityai/stable-audio-open-1.0/blob/main/model.safetensors)
+2. Go ahead and download model from here for when we fix that [Stable Audio Open on HuggingFace](https://huggingface.co/stabilityai/stable-audio-open-1.0/tree/main/model.safetensors)
 3. Make sure to run `pip install -r requirements.txt` inside the repo folder if you're not using Manager
 4. It should just run if you've got your environment variable set up
 
