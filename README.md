@@ -28,6 +28,12 @@ There will definitely be issues because this is so new and it was coded quickly 
 
 This is not an official StableAudioOpen repository.
 
+# Bonus Installation Tips
+
+For users experiencing installation difficulties, thanks to @marius-jopen, additional information can be found [here](https://github.com/lks-ai/ComfyUI-StableAudioSampler/issues/30#issuecomment-2609436644).
+
+Thanks to @camenduru, stable-audio-open-1.0 can also be obtained [here](https://huggingface.co/audo/stable-audio-open-1.0/tree/main) without the need to be logged in to your HuggingFace account.
+
 ## Current Features
 - Load your own models!
 - Runs in half precision optional
@@ -82,11 +88,5 @@ We are very open to anyone who wants to contribute from the open source communit
 
 # Feature Requests
 If you have a request for a feature, open an issue about it and it will be seen.
-
-# Bonus Installation Tips
-
-For users experiencing installation difficulties, thanks to @marius-jopen, additional information can be found [here](https://github.com/lks-ai/ComfyUI-StableAudioSampler/issues/30#issuecomment-2609436644).
-
-Thanks to @camenduru, stable-audio-open-1.0 can also be obtained [here](https://huggingface.co/audo/stable-audio-open-1.0/tree/main) without the need to be logged in to your HuggingFace account.
 
 Happy Diffusing!
