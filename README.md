@@ -83,4 +83,9 @@ We are very open to anyone who wants to contribute from the open source communit
 # Feature Requests
 If you have a request for a feature, open an issue about it and it will be seen.
 
+# Bonus Installation Tips
+
+For users experiencing installation difficulties, additional information can be found [here](https://github.com/lks-ai/ComfyUI-StableAudioSampler/issues/30#issuecomment-2609436644) Thank you @marius-jopen
+Thanks to @camenduru, stable-audio-open-1.0 can also be obtained [here](https://huggingface.co/audo/stable-audio-open-1.0/tree/main) without the need to be logged in to your HuggingFace account.
+
 Happy Diffusing!
